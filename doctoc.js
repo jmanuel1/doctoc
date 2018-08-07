@@ -29,9 +29,9 @@ function getAllHeaders(files, maxHeaderLevel) {
 
 function prepareMainTocHeaders (mainTocHeaders) {
   return mainTocHeaders.map(function (file) {
-    return file.headers.map(function (header) {
+    return transform.normalizeHeaderRanks(file.headers.map(function (header) {
       return _.extendOwn({ path: file.path }, header);
-    });
+    }));
   }).reduce(function (acc, current) {
     return acc.concat(current);
   }, []);
