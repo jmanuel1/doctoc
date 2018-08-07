@@ -6,14 +6,19 @@ var test = require('tap').test
   , exec = require("child_process").exec
   , fs = require('fs')
 
-test('\ngiven concatenated tocs from other files', function (t) {
+test('\ngiven headers from other files', function (t) {
   var mainToc = [ '- [Install](issue-93.md#install)',
                   '- [Configure](issue-93.md#configure)',
                   '- [Heading One](issue-94.md#heading-one)',
                   '  - [Subheading 1](issue-94.md#subheading-1)',
                   '  - [Subheading 2](issue-94.md#subheading-2)' ];
+  var headers = [ { rank: 1, name: 'Install', line: 3, path: "issue-93.md" },
+                  { rank: 1, name: 'Configure', line: 14, path: "issue-93.md" },
+                  { rank: 1, name: 'Heading One', line: 18, path: "issue-94.md" },
+                  { rank: 2, name: 'Subheading 1', line: 22, path: "issue-94.md" },
+                  { rank: 2, name: 'Subheading 2', line: 23, path: "issue-94.md" } ];
   var transformed = transform('', undefined, undefined, undefined, undefined
-    , undefined, mainToc.join('\n'));
+    , undefined, headers);
 
   t.deepEqual(
       transformed.toc.split('\n')
@@ -32,8 +37,8 @@ test('\ngiven a file and the --main and -s options', function (t) {
         console.error('exec error: ', error);
         return;
       }
-      t.deepEqual(stdout
-        , fs.readFileSync(__dirname + '/fixtures/stdout-main-toc.md', 'utf8')
+      t.match(stdout
+        , '- [Installation](test/fixtures/readme-with-custom-title.md#installation)\n- [API](test/fixtures/readme-with-custom-title.md#api)\n- [License](test/fixtures/readme-with-custom-title.md#license)'
         , 'spits out the correct table of contents with file paths in the anchors')
 
       t.end()
@@ -49,9 +54,8 @@ test('\ngiven a file with multiple header levels and --main and -s options'
             console.error('exec error: ', error);
             return;
           }
-          t.deepEqual(stdout
-            , fs.readFileSync(__dirname + '/fixtures/stdout-main-toc-levels.md'
-              , 'utf8')
+          t.match(stdout
+            , '- [Installation](test/fixtures/readme-with-html.md#installation)\n- [API](test/fixtures/readme-with-html.md#api)\n    - [dockops::Containers(docker) → {Object}](test/fixtures/readme-with-html.md#dockopscontainersdocker-%E2%86%92-object)\n    - [dockops::Containers::activePorts(cb)](test/fixtures/readme-with-html.md#dockopscontainersactiveportscb)\n    - [dockops::Containers::clean(id, cb)](test/fixtures/readme-with-html.md#dockopscontainerscleanid-cb)\n- [License](test/fixtures/readme-with-html.md#license)'
             , 'spits out the correct table of contents with correct header depth')
 
           t.end()
@@ -94,8 +98,13 @@ test('\ngiven main toc file content that already has a toc section'
                     'Title',
                     '<!-- END doctoc generated TOC please keep comment here to allow auto update -->',
                     'This is the main TOC file.' ];
+    var headers = [ { rank: 1, name: 'Install', line: 3, path: "issue-93.md" },
+                    { rank: 1, name: 'Configure', line: 14, path: "issue-93.md" },
+                    { rank: 1, name: 'Heading One', line: 18, path: "issue-94.md" },
+                    { rank: 2, name: 'Subheading 1', line: 22, path: "issue-94.md" },
+                    { rank: 2, name: 'Subheading 2', line: 23, path: "issue-94.md" } ];
     var transformed = transform(content.join('\n'), undefined, undefined
-      , undefined, undefined, undefined, mainToc.join('\n'));
+      , undefined, undefined, undefined, headers);
 
     t.deepEqual(
         transformed.data.split('\n')
@@ -124,7 +133,8 @@ test('\ngiven the --main, the -s option, and a directory to make a main toc of'
             console.error('exec error: ', error);
             return;
           }
-          t.ok(stdout.includes(toc.join('\n'))
+          t.match(stdout
+            , toc.join('\n')
             , 'there are newlines between the tocs from each file')
 
           t.end()
