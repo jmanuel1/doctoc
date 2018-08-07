@@ -8,6 +8,7 @@ var path      =  require('path')
   , file      =  require('./lib/file')
   , transform =  require('./lib/transform')
   , md        =  require('markdown-to-ast')
+  , _         =  require('underscore')
   , files;
 
 function cleanPath(path) {
@@ -17,13 +18,32 @@ function cleanPath(path) {
   return homeExpanded.replace(/\s/g, '\\ ');
 }
 
-function transformAndSave(files, mode, maxHeaderLevel, title, notitle, entryPrefix, stdOut, mainToc, saveMainOnly) {
+function getAllHeaders(files, maxHeaderLevel) {
+  return _(files).chain().pluck('path').map(function (target) {
+    var content = fs.readFileSync(target, 'utf8');
+    var headers = transform.getAllHeaders(content, maxHeaderLevel);
+    console.log(headers);
+    return { path: target, headers: headers };
+  }).value();
+}
+
+function prepareMainTocHeaders (mainTocHeaders) {
+  return mainTocHeaders.map(function (file) {
+    return file.headers.map(function (header) {
+      return _.extendOwn({ path: file.path }, header);
+    });
+  }).reduce(function (acc, current) {
+    return acc.concat(current);
+  }, []);
+}
+
+function transformAndSave(files, mode, maxHeaderLevel, title, notitle, entryPrefix, stdOut, mainTocHeaders) {
   console.log('\n==================\n');
 
   var transformed = files
     .map(function (x) {
       var content = fs.readFileSync(x.path, 'utf8')
-        , result = transform(content, mode, maxHeaderLevel, title, notitle, entryPrefix, mainToc);
+        , result = transform(content, mode, maxHeaderLevel, title, notitle, entryPrefix, prepareMainTocHeaders(mainTocHeaders));
       result.path = x.path;
       return result;
     });
@@ -31,63 +51,24 @@ function transformAndSave(files, mode, maxHeaderLevel, title, notitle, entryPref
     , unchanged = transformed.filter(function (x) { return !x.transformed; })
     , toc = transformed.filter(function (x) { return x.toc; })
 
-  if (stdOut && (!saveMainOnly || mainToc)) {
+  if (stdOut) {
     toc.forEach(function (x) {
       console.log(x.toc)
     })
   }
 
   unchanged.forEach(function (x) {
-    if (!saveMainOnly || mainToc) {
-      console.log('"%s" is up to date', x.path);
-    }
+    console.log('"%s" is up to date', x.path);
   });
 
   changed.forEach(function (x) {
-    if (stdOut && (!saveMainOnly || mainToc)) {
+    if (stdOut) {
       console.log('==================\n\n"%s" should be updated', x.path)
-    } else if (!saveMainOnly || mainToc) {
+    } else {
       console.log('"%s" will be updated', x.path);
       fs.writeFileSync(x.path, x.data, 'utf8');
     }
   });
-
-  if (mainToc === undefined) {
-    // aggregate all tocs into a big one
-    var toc = transformed.map(function (x) {
-      // add paths to all the links
-      return md.parse(x.toc).children.filter(function (y) {
-        return y.type === md.Syntax.List;
-      }).map(function (y) {
-        var links = flattenSublists(y);
-        return links;
-      }).reduce(function (arr, arr1) {
-        return arr.concat(arr1);
-      }).map(function (link) {
-        var indentation =
-          (mode === 'bitbucket.org' || mode === 'gitlab.com') ? '    ' : '  ';
-        var text = indentation.repeat(link.level) + entryPrefix + ' [' +
-          link.name + '](' + x.path + link.link + ')';
-        return text;
-      }).join('\n');
-    }).join('\n'); // Ensure there are newlines between each toc in a directory
-    return toc + '\n';
-  }
-}
-
-function flattenSublists(list, level) {
-  var array = [];
-  level = level || 0;
-  list.children.forEach(function (y) {
-    var link_node = y.children[0].children[0];
-    var link = link_node.url;
-    array.push({link: link, name: link_node.children[0].raw, level: level});
-    // add subheadings
-    if (y.children.length === 2) {
-      array = array.concat(flattenSublists(y.children[1], level + 1));
-    }
-  });
-  return array;
 }
 
 function printUsageAndExit(isErr) {
@@ -138,7 +119,7 @@ var stdOut = argv.s || argv.stdout
 var maxHeaderLevel = argv.m || argv.maxlevel;
 if (maxHeaderLevel && isNaN(maxHeaderLevel) || maxHeaderLevel < 0) { console.error('Max. heading level specified is not a positive number: ' + maxHeaderLevel), printUsageAndExit(true); }
 
-var mainToc = '';
+var mainTocHeaders = [];
 for (var i = 0; i < argv._.length; i++) {
   var target = cleanPath(argv._[i])
     , stat = fs.statSync(target)
@@ -151,13 +132,19 @@ for (var i = 0; i < argv._.length; i++) {
     files = [{ path: target }];
   }
 
-  mainToc += transformAndSave(files, mode, maxHeaderLevel, title, notitle, entryPrefix, stdOut, undefined, /* saveMainOnly */ argv.main);
+  if (argv.main) {
+    mainTocHeaders = mainTocHeaders.concat(
+      getAllHeaders(files, maxHeaderLevel));
+  } else {
+    transformAndSave(files, mode, maxHeaderLevel, title, notitle, entryPrefix, stdOut);
+  }
   console.log('\nEverything is OK.');
 }
 
 if (argv.main) {
+  // console.log(mainTocHeaders);
   target = cleanPath(argv.main);
   console.log('\nDocToccing main TOC file "%s" for %s.', target, mode);
-  transformAndSave([{ path: target }], mode, maxHeaderLevel, title, notitle, entryPrefix, stdOut, mainToc, /* saveMainOnly */ argv.main);
+  transformAndSave([{ path: target }], mode, maxHeaderLevel, title, notitle, entryPrefix, stdOut, mainTocHeaders);
   console.log('\nEverything is OK.');
 }
