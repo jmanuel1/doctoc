@@ -40,6 +40,8 @@ function prepareMainTocHeaders (mainTocHeaders) {
 function transformAndSave(files, mode, maxHeaderLevel, title, notitle, entryPrefix, stdOut, mainTocHeaders) {
   console.log('\n==================\n');
 
+  mainTocHeaders = mainTocHeaders || [];
+  
   var transformed = files
     .map(function (x) {
       var content = fs.readFileSync(x.path, 'utf8')
